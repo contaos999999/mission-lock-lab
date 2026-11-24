@@ -23,6 +23,7 @@ function requireCondition(condition, message) {
 async function api(path, token, method = 'GET', body) {
   const response = await fetch(`https://api.github.com${path}`, {
     method,
+    cache: 'no-store',
     redirect: 'error',
     signal: AbortSignal.timeout(15_000),
     headers: {
@@ -167,10 +168,17 @@ export async function run(env) {
       const created = await api(`${route}/statuses/${sha}`, token, 'POST', {
         context, state, description, target_url: root,
       });
-      const current = await latest(sha, context);
-      requireCondition(current?.id === created.id && current.creator?.login === bot &&
-        current.state === state, 'App status failed provenance readback');
-      console.log(JSON.stringify({ operation, sha, context, state, statusId: current.id, appId }));
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const current = await latest(sha, context);
+        if (current?.id === created.id) {
+          requireCondition(current.creator?.login === bot && current.state === state,
+            'App status failed provenance readback');
+          console.log(JSON.stringify({ operation, sha, context, state, statusId: current.id, appId }));
+          return;
+        }
+        if (attempt < 7) await new Promise(resolve => setTimeout(resolve, 1_000));
+      }
+      throw new Error('Created App status was not visible as current during readback');
     }
     if (operation === 'seed') {
       await post(base, hold, 'pending', 'N17(c) lab context registration');

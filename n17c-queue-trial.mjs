@@ -1,6 +1,7 @@
 import { createPrivateKey, sign } from 'node:crypto';
 
 const owner = 'contaos999999';
+const operator = 'contaos9999';
 const repo = 'mission-lock-lab';
 const project = `${owner}/${repo}`;
 const route = `/repos/${project}`;
@@ -76,8 +77,8 @@ export async function run(env) {
   const { LAB_OPERATION: operation, GITHUB_TOKEN: readToken, APP_PRIVATE_KEY: key,
     GITHUB_SHA: base } = env;
   requireCondition(env.GITHUB_REPOSITORY === project && env.GITHUB_REF === 'refs/heads/main' &&
-    env.GITHUB_EVENT_NAME === 'workflow_dispatch' && env.GITHUB_ACTOR === owner &&
-    env.GITHUB_TRIGGERING_ACTOR === owner && /^[0-9a-f]{40}$/.test(base ?? '') &&
+    env.GITHUB_EVENT_NAME === 'workflow_dispatch' && env.GITHUB_ACTOR === operator &&
+    env.GITHUB_TRIGGERING_ACTOR === operator && /^[0-9a-f]{40}$/.test(base ?? '') &&
     readToken && key && ['seed', 'admit', 'observe', 'revoke'].includes(operation),
   'Untrusted laboratory dispatch or missing credential');
 

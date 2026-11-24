@@ -36,7 +36,7 @@ jobs:
 
           function parsePrivateKey(secret) {
             const marker = /-----BEGIN (RSA PRIVATE KEY|PRIVATE KEY)-----([A-Za-z0-9+/=\s]+)-----END \1-----/;
-            let candidate = secret.trim().replace(/^["']|["']$/g, '').trim().replace(/\\r\\n|\\n|\\r/g, '\n');
+            let candidate = secret.trim().replace(/^["']|["']$/g, '').replace(/\\r\\n|\\n|\\r/g, '\n').trim();
             const encoded = candidate.replace(/\s/g, '');
             if (!candidate.startsWith('-----BEGIN ') && /^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
               candidate = Buffer.from(encoded, 'base64').toString('utf8').trim();

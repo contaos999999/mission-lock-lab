@@ -35,6 +35,6 @@ jobs:
           cd "$RUNNER_TEMP"
           curl --fail --silent --show-error --proto '=https' --max-time 15 \
             --output n17c-queue-trial.mjs \
-            https://raw.githubusercontent.com/contaos999999/mission-lock-lab/cb8fa7f36d5e2c8092dae5675222cce3cda5301a/n17c-queue-trial.mjs
-          printf '%s  %s\n' '576dcc85b230715702fa03665ff701e329a9f6a9f7c6ff44abcbbc8b370fe3bf' n17c-queue-trial.mjs | sha256sum --check --status
+            https://raw.githubusercontent.com/contaos999999/mission-lock-lab/8bf53ca71c4fd883d1a9eda6290f856fecd458b2/n17c-queue-trial.mjs
+          printf '%s  %s\n' 'd432339588400e0f9ccb0f0d24e9e2dbb64c53fd43f5f8e7699f159097f8da76' n17c-queue-trial.mjs | sha256sum --check --status
           node n17c-queue-trial.mjs

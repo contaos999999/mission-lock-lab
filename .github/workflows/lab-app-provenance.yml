@@ -1,0 +1,93 @@
+name: Lab App provenance
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  provenance:
+    if: github.repository == 'contaos999999/mission-lock-lab' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: mission-lock-lab-publisher
+    steps:
+      - name: Verify the App and publish a synthetic pending status
+        env:
+          APP_PRIVATE_KEY: ${{ secrets.MISSION_LOCK_LAB_APP_PRIVATE_KEY }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { sign } from 'node:crypto';
+
+          const owner = 'contaos999999';
+          const repository = `${owner}/mission-lock-lab`;
+          const appId = 5900781;
+          const appSlug = 'contaos-mission-lock-lab';
+          const installationId = 185299765;
+          const sha = process.env.GITHUB_SHA;
+          const privateKey = process.env.APP_PRIVATE_KEY;
+          const context = 'mission-lock-lab/app-provenance';
+
+          if (process.env.GITHUB_REPOSITORY !== repository ||
+              process.env.GITHUB_REF !== 'refs/heads/main' ||
+              !/^[0-9a-f]{40}$/.test(sha ?? '') || !privateKey) {
+            throw new Error('Missing credential or unexpected lab dispatch context');
+          }
+
+          async function github(path, token, method = 'GET', body) {
+            const response = await fetch(`https://api.github.com${path}`, {
+              method,
+              redirect: 'error',
+              signal: AbortSignal.timeout(15_000),
+              headers: {
+                Accept: 'application/vnd.github+json',
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'X-GitHub-Api-Version': '2022-11-28',
+              },
+              body: body === undefined ? undefined : JSON.stringify(body),
+            });
+            if (!response.ok) throw new Error(`${method} ${path}: HTTP ${response.status}`);
+            return response.status === 204 ? undefined : response.json();
+          }
+
+          const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+          const now = Math.floor(Date.now() / 1000);
+          const unsigned = `${encode({ alg: 'RS256', typ: 'JWT' })}.${encode({
+            iat: now - 60, exp: now + 480, iss: String(appId),
+          })}`;
+          const jwt = `${unsigned}.${sign('RSA-SHA256', Buffer.from(unsigned), privateKey).toString('base64url')}`;
+          const app = await github('/app', jwt);
+          const installation = await github(`/app/installations/${installationId}`, jwt);
+          if (app.id !== appId || app.slug !== appSlug || installation.app_id !== appId ||
+              installation.account?.login !== owner || installation.repository_selection !== 'selected') {
+            throw new Error('Unexpected App identity or installation scope');
+          }
+
+          const credential = await github(`/app/installations/${installationId}/access_tokens`, jwt, 'POST', {
+            repository_ids: [1469627758],
+            permissions: { statuses: 'write' },
+          });
+          try {
+            const access = await github('/installation/repositories', credential.token);
+            if (access.total_count !== 1 || access.repositories?.[0]?.full_name !== repository ||
+                credential.permissions?.statuses !== 'write' ||
+                Object.keys(credential.permissions).some(key => !['statuses', 'metadata'].includes(key))) {
+              throw new Error('Installation token exceeds the permitted laboratory scope');
+            }
+            const status = await github(`/repos/${repository}/statuses/${sha}`, credential.token, 'POST', {
+              state: 'pending',
+              context,
+              description: 'Synthetic publisher provenance only',
+            });
+            const statuses = await github(`/repos/${repository}/commits/${sha}/statuses`, credential.token);
+            const recorded = statuses.find(entry => entry.id === status.id);
+            if (!recorded || recorded.state !== 'pending' || recorded.context !== context ||
+                recorded.creator?.login !== `${appSlug}[bot]`) {
+              throw new Error('Status provenance did not match the configured App');
+            }
+            console.log(JSON.stringify({ appId, installationId, sha, context, statusId: recorded.id, creator: recorded.creator.login }));
+          } finally {
+            await github('/installation/token', credential.token, 'DELETE');
+          }
+          NODE

@@ -1,0 +1,40 @@
+name: Lab N17(c) queue trial
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Controlled laboratory operation
+        required: true
+        type: choice
+        options: [seed, admit, observe, revoke]
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: lab-n17c-queue-trial
+  cancel-in-progress: false
+
+jobs:
+  trial:
+    if: github.repository == 'contaos999999/mission-lock-lab' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: mission-lock-lab-publisher
+    steps:
+      - name: Verify and exercise the isolated queue gate
+        env:
+          APP_PRIVATE_KEY: ${{ secrets.MISSION_LOCK_LAB_APP_PRIVATE_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          LAB_OPERATION: ${{ inputs.operation }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl --fail --silent --show-error --proto '=https' --max-time 15 \
+            --output n17c-queue-trial.mjs \
+            https://raw.githubusercontent.com/contaos999999/mission-lock-lab/45fc694939b85aac894db938b1e6b0b4e85f71ca/n17c-queue-trial.mjs
+          printf '%s  %s\n' '981fa3ce9601aa35c8d1e47d7c3434c31f23f8ac4160dc68d181a1ed62baa3da' n17c-queue-trial.mjs | sha256sum --check --status
+          node n17c-queue-trial.mjs

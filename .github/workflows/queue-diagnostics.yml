@@ -1,0 +1,35 @@
+name: Lab queue diagnostics
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+
+permissions: {}
+
+jobs:
+  context:
+    name: Lab queue event
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify synthetic event identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$GITHUB_EVENT_NAME" in
+            merge_group)
+              jq -e --arg sha "$GITHUB_SHA" '.action == "checks_requested" and .merge_group.head_sha == $sha and .merge_group.base_ref == "refs/heads/main"' "$GITHUB_EVENT_PATH" >/dev/null
+              ;;
+            pull_request)
+              jq -e '.pull_request.base.ref == "main"' "$GITHUB_EVENT_PATH" >/dev/null
+              ;;
+            push)
+              jq -e --arg sha "$GITHUB_SHA" '.ref == "refs/heads/main" and .after == $sha' "$GITHUB_EVENT_PATH" >/dev/null
+              ;;
+            *) exit 1 ;;
+          esac
+          printf 'Lab event: %s [%s]\n' "$GITHUB_EVENT_NAME" "$GITHUB_SHA"

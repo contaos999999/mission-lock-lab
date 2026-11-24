@@ -17,7 +17,7 @@ jobs:
           APP_PRIVATE_KEY: ${{ secrets.MISSION_LOCK_LAB_APP_PRIVATE_KEY }}
         run: |
           node --input-type=module <<'NODE'
-          import { sign } from 'node:crypto';
+          import { createPrivateKey, sign } from 'node:crypto';
 
           const owner = 'contaos999999';
           const repository = `${owner}/mission-lock-lab`;
@@ -25,14 +25,38 @@ jobs:
           const appSlug = 'contaos-mission-lock-lab';
           const installationId = 185299765;
           const sha = process.env.GITHUB_SHA;
-          const privateKey = process.env.APP_PRIVATE_KEY;
+          const privateKeySecret = process.env.APP_PRIVATE_KEY;
           const context = 'mission-lock-lab/app-provenance';
 
           if (process.env.GITHUB_REPOSITORY !== repository ||
               process.env.GITHUB_REF !== 'refs/heads/main' ||
-              !/^[0-9a-f]{40}$/.test(sha ?? '') || !privateKey) {
+              !/^[0-9a-f]{40}$/.test(sha ?? '') || !privateKeySecret) {
             throw new Error('Missing credential or unexpected lab dispatch context');
           }
+
+          function parsePrivateKey(secret) {
+            const marker = /-----BEGIN (RSA PRIVATE KEY|PRIVATE KEY)-----([A-Za-z0-9+/=\s]+)-----END \1-----/;
+            let candidate = secret.trim().replace(/^["']|["']$/g, '').trim().replace(/\\r\\n|\\n|\\r/g, '\n');
+            const encoded = candidate.replace(/\s/g, '');
+            if (!candidate.startsWith('-----BEGIN ') && /^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+              candidate = Buffer.from(encoded, 'base64').toString('utf8').trim();
+            }
+            const envelope = candidate.match(marker);
+            if (!envelope || envelope[0] !== candidate) {
+              throw new Error('App credential must contain the full RSA private key PEM or its Base64 encoding');
+            }
+            const [, label, body] = envelope;
+            const wrapped = body.replace(/\s/g, '').match(/.{1,64}/g)?.join('\n');
+            try {
+              const key = createPrivateKey(['-----BEGIN ' + label + '-----', wrapped, '-----END ' + label + '-----', ''].join('\n'));
+              if (key.asymmetricKeyType !== 'rsa') throw new Error('Unexpected key type');
+              return key;
+            } catch {
+              throw new Error('App credential contains an invalid or unsupported RSA private key');
+            }
+          }
+
+          const privateKey = parsePrivateKey(privateKeySecret);
 
           async function github(path, token, method = 'GET', body) {
             const response = await fetch(`https://api.github.com${path}`, {
